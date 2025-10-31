@@ -32,33 +32,73 @@ class DatasetService {
   private readonly EXPECTED_HF_ENTRIES = 7000; // Expected total HF entries (for detecting incomplete cache)
 
   /**
-   * Load dataset from browser cache (IndexedDB/localStorage)
+   * Open IndexedDB connection
+   */
+  private async openDB(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open('AIAmbassadorDB', 1);
+      
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+      
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains('dataset')) {
+          db.createObjectStore('dataset', { keyPath: 'key' });
+        }
+      };
+    });
+  }
+
+  /**
+   * Load dataset from browser cache (IndexedDB with localStorage fallback)
    */
   private async loadFromCache(): Promise<{ dataset: DatasetEntry[], timestamp: number } | null> {
     try {
-      const cached = localStorage.getItem(this.CACHE_KEY);
-      if (!cached) return null;
+      // Try IndexedDB first (supports larger datasets)
+      const db = await this.openDB();
+      const transaction = db.transaction(['dataset'], 'readonly');
+      const store = transaction.objectStore('dataset');
+      const request = store.get(this.CACHE_KEY);
 
-      const parsed = JSON.parse(cached);
-      
-      // Check cache version and expiry
-      if (parsed.version !== this.CACHE_VERSION) {
-        console.log('📦 Cache version mismatch, will refresh');
-        localStorage.removeItem(this.CACHE_KEY);
+      const cached = await new Promise<any>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+
+      db.close();
+
+      if (!cached) {
+        // Fallback to localStorage for backwards compatibility
+        const localCached = localStorage.getItem(this.CACHE_KEY);
+        if (localCached) {
+          const parsed = JSON.parse(localCached);
+          // Migrate to IndexedDB
+          await this.saveToCache(parsed.dataset);
+          localStorage.removeItem(this.CACHE_KEY); // Clean up old storage
+          return { dataset: parsed.dataset, timestamp: parsed.timestamp };
+        }
         return null;
       }
 
-      const age = Date.now() - parsed.timestamp;
+      // Check cache version and expiry
+      if (cached.version !== this.CACHE_VERSION) {
+        console.log('📦 Cache version mismatch, will refresh');
+        await this.clearCache();
+        return null;
+      }
+
+      const age = Date.now() - cached.timestamp;
       const maxAge = this.CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
       
       if (age > maxAge) {
         console.log('📦 Cache expired, will refresh');
-        localStorage.removeItem(this.CACHE_KEY);
+        await this.clearCache();
         return null;
       }
 
-      console.log(`📦 Loaded ${parsed.dataset.length} entries from cache (age: ${Math.round(age / (1000 * 60 * 60))}h)`);
-      return { dataset: parsed.dataset, timestamp: parsed.timestamp };
+      console.log(`📦 Loaded ${cached.dataset.length} entries from cache (age: ${Math.round(age / (1000 * 60 * 60))}h)`);
+      return { dataset: cached.dataset, timestamp: cached.timestamp };
     } catch (error) {
       console.warn('⚠️ Error loading cache:', error);
       return null;
@@ -66,19 +106,65 @@ class DatasetService {
   }
 
   /**
-   * Save dataset to browser cache
+   * Save dataset to browser cache (IndexedDB for large datasets)
    */
   private async saveToCache(dataset: DatasetEntry[]): Promise<void> {
     try {
       const cacheData = {
+        key: this.CACHE_KEY,
         version: this.CACHE_VERSION,
         timestamp: Date.now(),
         dataset: dataset
       };
-      localStorage.setItem(this.CACHE_KEY, JSON.stringify(cacheData));
-      console.log(`💾 Cached ${dataset.length} entries to browser storage`);
+
+      const db = await this.openDB();
+      const transaction = db.transaction(['dataset'], 'readwrite');
+      const store = transaction.objectStore('dataset');
+      const request = store.put(cacheData);
+
+      await new Promise<void>((resolve, reject) => {
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+
+      db.close();
+      
+      // Calculate cache size for logging
+      const sizeInMB = (JSON.stringify(cacheData).length / (1024 * 1024)).toFixed(2);
+      console.log(`💾 Cached ${dataset.length} entries to IndexedDB (~${sizeInMB} MB)`);
     } catch (error) {
-      console.warn('⚠️ Error saving cache (storage full?):', error);
+      console.error('⚠️ Error saving cache:', error);
+      // If IndexedDB fails, still try localStorage for smaller datasets
+      if (dataset.length < 1000) {
+        try {
+          const cacheData = { version: this.CACHE_VERSION, timestamp: Date.now(), dataset };
+          localStorage.setItem(this.CACHE_KEY, JSON.stringify(cacheData));
+          console.log(`💾 Fallback: Cached ${dataset.length} entries to localStorage`);
+        } catch (e) {
+          console.error('⚠️ Both IndexedDB and localStorage failed:', e);
+        }
+      }
+    }
+  }
+
+  /**
+   * Clear cache from both IndexedDB and localStorage
+   */
+  private async clearCache(): Promise<void> {
+    try {
+      const db = await this.openDB();
+      const transaction = db.transaction(['dataset'], 'readwrite');
+      const store = transaction.objectStore('dataset');
+      store.delete(this.CACHE_KEY);
+      db.close();
+    } catch (error) {
+      console.warn('⚠️ Error clearing IndexedDB cache:', error);
+    }
+    
+    try {
+      localStorage.removeItem(this.CACHE_KEY);
+    } catch (error) {
+      console.warn('⚠️ Error clearing localStorage cache:', error);
     }
   }
 
@@ -292,7 +378,7 @@ class DatasetService {
    * Useful for debugging or forcing a refresh
    */
   async clearCacheAndReload(): Promise<void> {
-    localStorage.removeItem(this.CACHE_KEY);
+    await this.clearCache();
     this.isLoaded = false;
     this.loadingPromise = null;
     this.dataset = [];

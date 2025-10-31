@@ -21,7 +21,7 @@ class DatasetService {
   private loadingPromise: Promise<void> | null = null;
 
   /**
-   * Fetch the dataset from Hugging Face
+   * Fetch the dataset from Hugging Face (in batches)
    */
   async loadDataset(): Promise<void> {
     if (this.isLoaded) return;
@@ -29,22 +29,43 @@ class DatasetService {
 
     this.loadingPromise = (async () => {
       try {
-        // Fetch the dataset from Hugging Face datasets API
-        const response = await fetch(
-          'https://datasets-server.huggingface.co/rows?dataset=millat/indian_university_guidance_for_bangladeshi_students&config=default&split=train&offset=0&length=10000'
-        );
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch dataset: ${response.statusText}`);
+        // Fetch dataset in batches (max 100 per request for HF API)
+        const batchSize = 100;
+        const maxEntries = 500; // Load first 500 entries for faster initial load
+        let offset = 0;
+        let allRows: DatasetEntry[] = [];
+
+        while (offset < maxEntries) {
+          const length = Math.min(batchSize, maxEntries - offset);
+          const url = `https://datasets-server.huggingface.co/rows?dataset=millat/indian_university_guidance_for_bangladeshi_students&config=default&split=train&offset=${offset}&length=${length}`;
+          
+          const response = await fetch(url);
+          
+          if (!response.ok) {
+            console.warn(`⚠️ Failed to fetch batch at offset ${offset}, stopping load`);
+            break;
+          }
+
+          const data = await response.json();
+          const rows = data.rows.map((row: any) => row.row);
+          
+          if (rows.length === 0) break;
+          
+          allRows = allRows.concat(rows);
+          offset += rows.length;
+
+          // Stop if we got fewer rows than requested (end of dataset)
+          if (rows.length < length) break;
         }
 
-        const data = await response.json();
-        this.dataset = data.rows.map((row: any) => row.row);
+        this.dataset = allRows;
         this.isLoaded = true;
         console.log(`✅ Dataset loaded: ${this.dataset.length} entries`);
       } catch (error) {
         console.error('❌ Error loading dataset:', error);
-        throw error;
+        // Don't throw - fall back to basic system prompt
+        this.dataset = [];
+        this.isLoaded = true;
       }
     })();
 

@@ -1,27 +1,66 @@
 // Service to fetch and search the Hugging Face dataset
 // Dataset: https://huggingface.co/datasets/millat/indian_university_guidance_for_bangladeshi_students
+// Also loads verified local data with priority
 
 interface DatasetEntry {
   question: string;
   answer: string;
-  context: string;
-  source: string;
-  metadata: {
+  context?: string;
+  source?: string;
+  metadata?: {
     degree_equivalence?: string;
     grading_conversion?: string;
-    country_origin: string;
-    tone: string;
-    cultural_sensitivity: boolean;
+    country_origin?: string;
+    tone?: string;
+    cultural_sensitivity?: boolean;
   };
+}
+
+interface LocalDataEntry {
+  question: string;
+  answer: string;
 }
 
 class DatasetService {
   private dataset: DatasetEntry[] = [];
+  private verifiedData: DatasetEntry[] = [];
   private isLoaded: boolean = false;
   private loadingPromise: Promise<void> | null = null;
 
   /**
-   * Fetch the dataset from Hugging Face (in batches)
+   * Load verified local data (takes priority)
+   */
+  private async loadVerifiedData(): Promise<void> {
+    try {
+      const response = await fetch('/data/verified-fees-scholarships-2024.json');
+      if (!response.ok) {
+        console.warn('⚠️ Could not load verified data file');
+        return;
+      }
+      
+      const localData: LocalDataEntry[] = await response.json();
+      
+      // Convert to DatasetEntry format with high priority
+      this.verifiedData = localData.map(item => ({
+        question: item.question,
+        answer: item.answer,
+        context: "Verified 2024-25 Fee Structure and Scholarship Policy",
+        source: "Official Sharda University 2024-25 Documentation",
+        metadata: {
+          country_origin: "Bangladesh",
+          tone: "professional",
+          cultural_sensitivity: true
+        }
+      }));
+      
+      console.log(`✅ Verified data loaded: ${this.verifiedData.length} entries`);
+    } catch (error) {
+      console.warn('⚠️ Error loading verified data:', error);
+    }
+  }
+
+  /**
+   * Fetch the dataset from Hugging Face (in batches) and merge with verified data
    */
   async loadDataset(): Promise<void> {
     if (this.isLoaded) return;
@@ -29,6 +68,9 @@ class DatasetService {
 
     this.loadingPromise = (async () => {
       try {
+        // First, load verified local data
+        await this.loadVerifiedData();
+        
         // Fetch dataset in batches (max 100 per request for HF API)
         const batchSize = 100;
         const maxEntries = 500; // Load first 500 entries for faster initial load
@@ -58,14 +100,16 @@ class DatasetService {
           if (rows.length < length) break;
         }
 
-        this.dataset = allRows;
+        // Merge: verified data first (takes priority), then HF dataset
+        this.dataset = [...this.verifiedData, ...allRows];
         this.isLoaded = true;
-        console.log(`✅ Dataset loaded: ${this.dataset.length} entries`);
+        console.log(`✅ Dataset loaded: ${this.verifiedData.length} verified + ${allRows.length} HF = ${this.dataset.length} total entries`);
       } catch (error) {
         console.error('❌ Error loading dataset:', error);
-        // Don't throw - fall back to basic system prompt
-        this.dataset = [];
+        // Fall back to verified data only if available
+        this.dataset = this.verifiedData;
         this.isLoaded = true;
+        console.log(`⚠️ Fallback: Using ${this.dataset.length} verified entries only`);
       }
     })();
 
@@ -98,7 +142,7 @@ class DatasetService {
     const scored = this.dataset.map(entry => ({
       entry,
       score: this.calculateSimilarity(query, entry.question) * 0.7 + 
-             this.calculateSimilarity(query, entry.context) * 0.3
+             this.calculateSimilarity(query, entry.context || '') * 0.3
     }));
 
     // Sort by score and return top K
@@ -117,7 +161,9 @@ class DatasetService {
     let context = "**Relevant Information from Knowledge Base:**\n\n";
     
     entries.forEach((entry, index) => {
-      context += `**Context ${index + 1}:** ${entry.context}\n`;
+      if (entry.context) {
+        context += `**Context ${index + 1}:** ${entry.context}\n`;
+      }
       context += `**Q:** ${entry.question}\n`;
       context += `**A:** ${entry.answer}\n`;
       if (entry.source) {
@@ -153,7 +199,7 @@ class DatasetService {
       entries.forEach(entry => {
         knowledgeBase += `*   **Question:** ${entry.question}\n`;
         knowledgeBase += `*   **Answer:** ${entry.answer}\n`;
-        if (entry.metadata.grading_conversion) {
+        if (entry.metadata?.grading_conversion) {
           knowledgeBase += `    *Note: ${entry.metadata.grading_conversion}*\n`;
         }
         knowledgeBase += `\n`;

@@ -41,7 +41,9 @@ const ChatView: React.FC<ChatViewProps> = ({ user, onBack }) => {
       
       // Restart the chat session
       if (user.isAi) {
-        geminiService.startChat();
+        geminiService.startChat().catch(error => {
+          console.error('Error restarting chat:', error);
+        });
       }
     }
   };
@@ -58,7 +60,7 @@ const ChatView: React.FC<ChatViewProps> = ({ user, onBack }) => {
       setIsLoading(true);
       const firstMessage: Message = {
         id: 'initial-greeting',
-        text: "Hello! I'm your AI guide for Sharda University, trained to help Bangladeshi students like you. I can answer questions about admissions, courses, life in India, and more based on our official guidance. How can I assist you today?",
+        text: "Hello! I'm your AI guide for Sharda University, trained to help Bangladeshi students like you. I can answer questions about admissions, courses, life in India, scholarships, and more based on our comprehensive database of 7,000+ Q&A pairs. How can I assist you today?",
         sender: 'ai',
         timestamp: new Date().toISOString()
       };
@@ -70,7 +72,9 @@ const ChatView: React.FC<ChatViewProps> = ({ user, onBack }) => {
     }
     
     if (user.isAi) {
-      geminiService.startChat();
+      geminiService.startChat().catch(error => {
+        console.error('Error starting chat:', error);
+      });
     }
   }, [user.id, user.isAi]);
 

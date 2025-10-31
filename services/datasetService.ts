@@ -150,34 +150,41 @@ class DatasetService {
           const length = Math.min(batchSize, maxEntries - offset);
           const url = `https://datasets-server.huggingface.co/rows?dataset=millat/indian_university_guidance_for_bangladeshi_students&config=default&split=train&offset=${offset}&length=${length}`;
           
-          const response = await fetch(url);
-          
-          if (!response.ok) {
-            console.warn(`⚠️ Failed to fetch batch at offset ${offset}, stopping load`);
+          try {
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+              console.warn(`⚠️ API limit reached at ${offset} (${response.status}), stopping here`);
+              break;
+            }
+
+            const data = await response.json();
+            const rows = data.rows.map((row: any) => row.row);
+            
+            if (rows.length === 0) break;
+            
+            allRows = allRows.concat(rows);
+            offset += rows.length;
+
+            console.log(`📥 HF batch loaded: ${rows.length} entries (total HF: ${allRows.length})`);
+
+            // Stop if we got fewer rows than requested (end of dataset)
+            if (rows.length < length) break;
+          } catch (error) {
+            console.warn(`⚠️ Fetch error at offset ${offset}, stopping here`);
             break;
           }
-
-          const data = await response.json();
-          const rows = data.rows.map((row: any) => row.row);
-          
-          if (rows.length === 0) break;
-          
-          allRows = allRows.concat(rows);
-          offset += rows.length;
-
-          console.log(`📥 HF batch loaded: ${rows.length} entries (total HF: ${allRows.length})`);
-
-          // Stop if we got fewer rows than requested (end of dataset)
-          if (rows.length < length) break;
         }
 
         // Merge: verified base knowledge FIRST (priority), then entire HF dataset
         this.dataset = [...this.verifiedData, ...allRows];
         this.isLoaded = true;
-        console.log(`✅ Full dataset loaded: ${this.verifiedData.length} verified (priority) + ${allRows.length} HF = ${this.dataset.length} total entries`);
         
-        // Save to cache for next time
-        await this.saveToCache(this.dataset);
+        // Save to cache even if we didn't get all entries (partial dataset is better than nothing)
+        if (this.dataset.length > 0) {
+          console.log(`✅ Full dataset loaded: ${this.verifiedData.length} verified (priority) + ${allRows.length} HF = ${this.dataset.length} total entries`);
+          await this.saveToCache(this.dataset);
+        }
         
       } catch (error) {
         console.error('❌ Error loading dataset:', error);

@@ -16,13 +16,51 @@ interface DatasetEntry {
   };
 }
 
+interface LocalDataEntry {
+  question: string;
+  answer: string;
+}
+
 class DatasetService {
   private dataset: DatasetEntry[] = [];
+  private verifiedData: DatasetEntry[] = [];
   private isLoaded: boolean = false;
   private loadingPromise: Promise<void> | null = null;
 
   /**
-   * Fetch the dataset from Hugging Face (in batches)
+   * Load verified local data (base knowledge for accuracy)
+   */
+  private async loadVerifiedData(): Promise<void> {
+    try {
+      const response = await fetch('/data/verified-fees-scholarships-2024.json');
+      if (!response.ok) {
+        console.warn('⚠️ Could not load verified data file');
+        return;
+      }
+      
+      const localData: LocalDataEntry[] = await response.json();
+      
+      // Convert to DatasetEntry format with high priority
+      this.verifiedData = localData.map(item => ({
+        question: item.question,
+        answer: item.answer,
+        context: "Verified 2024-25 Fee Structure and Scholarship Policy",
+        source: "Official Sharda University 2024-25 Documentation",
+        metadata: {
+          country_origin: "Bangladesh",
+          tone: "professional",
+          cultural_sensitivity: true
+        }
+      }));
+      
+      console.log(`✅ Verified base knowledge loaded: ${this.verifiedData.length} entries`);
+    } catch (error) {
+      console.warn('⚠️ Error loading verified data:', error);
+    }
+  }
+
+  /**
+   * Fetch entire dataset from Hugging Face and merge with verified base knowledge
    */
   async loadDataset(): Promise<void> {
     if (this.isLoaded) return;
@@ -30,7 +68,10 @@ class DatasetService {
 
     this.loadingPromise = (async () => {
       try {
-        // Fetch dataset in batches (max 100 per request for HF API)
+        // First, load verified base knowledge (takes priority)
+        await this.loadVerifiedData();
+        
+        // Fetch entire dataset in batches (max 100 per request for HF API)
         const batchSize = 100;
         const maxEntries = 10000; // Load all entries from Hugging Face
         let offset = 0;
@@ -55,19 +96,22 @@ class DatasetService {
           allRows = allRows.concat(rows);
           offset += rows.length;
 
-          console.log(`📥 Loaded batch: ${rows.length} entries (total: ${allRows.length})`);
+          console.log(`📥 HF batch loaded: ${rows.length} entries (total HF: ${allRows.length})`);
 
           // Stop if we got fewer rows than requested (end of dataset)
           if (rows.length < length) break;
         }
 
-        this.dataset = allRows;
+        // Merge: verified base knowledge FIRST (priority), then entire HF dataset
+        this.dataset = [...this.verifiedData, ...allRows];
         this.isLoaded = true;
-        console.log(`✅ Dataset loaded from Hugging Face: ${this.dataset.length} total entries`);
+        console.log(`✅ Full dataset loaded: ${this.verifiedData.length} verified (priority) + ${allRows.length} HF = ${this.dataset.length} total entries`);
       } catch (error) {
         console.error('❌ Error loading dataset:', error);
-        this.dataset = [];
+        // Fall back to verified data only if available
+        this.dataset = this.verifiedData;
         this.isLoaded = true;
+        console.log(`⚠️ Fallback: Using ${this.dataset.length} verified entries only`);
       }
     })();
 

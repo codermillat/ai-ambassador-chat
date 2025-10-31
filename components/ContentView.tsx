@@ -4,25 +4,41 @@ const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@StudyAtShardaBD';
 
 const videos = [
     {
-        id: 'k-y_N4-I22I',
+        id: 'G-xzRDoeymw',
         title: 'Sharda University Campus Tour 2024 | Full Campus Video',
     },
     {
-        id: '9e-P2n9-qA4',
+        id: 'odtOcRjV_5k',
         title: 'Study in India from Bangladesh || Sharda University in one minute',
     },
     {
-        id: 'PZ7eKqUSXH8',
+        id: 'ChUC-BueRCg',
         title: 'Bangladeshi Students Celebration at Sharda University | Pohela Boishakh & Eid Reunion',
     },
     {
-        id: 'e8s0x8G5h-M',
+        id: 'gZB_OlkBljM',
         title: 'Why should Bangladeshi students study at Sharda University?',
+    },
+    {
+        id: 'rroph5Sfurg',
+        title: 'Student Experience at Sharda University',
+    },
+    {
+        id: 'W4uKZAxZpDw',
+        title: 'Campus Life at Sharda University',
+    },
+    {
+        id: 'iElt3S0kJH0',
+        title: 'Academic Programs at Sharda University',
+    },
+    {
+        id: 'nx1iUEocDpk',
+        title: 'International Student Guide',
     },
 ];
 
 const ContentView: React.FC = () => {
-    const mainVideoId = 'k-y_N4-I22I';
+    const mainVideoId = 'G-xzRDoeymw';
 
     return (
         <div className="col-span-1 md:col-span-2 bg-white rounded-lg p-6 shadow-sm border border-gray-200">

@@ -22,6 +22,30 @@ const ChatView: React.FC<ChatViewProps> = ({ user, onBack }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const handleClearChat = () => {
+    if (window.confirm('Are you sure you want to clear this chat history? This action cannot be undone.')) {
+      localStorage.removeItem(`chatHistory_${user.id}`);
+      setMessages([]);
+      
+      // If it's an AI ambassador, show the initial greeting again
+      if (user.isAi) {
+        const firstMessage: Message = {
+          id: 'initial-greeting',
+          text: "Hello! I'm your AI guide for Sharda University, trained to help Bangladeshi students like you. I can answer questions about admissions, courses, life in India, and more based on our official guidance. How can I assist you today?",
+          sender: 'ai',
+          timestamp: new Date().toISOString()
+        };
+        setMessages([firstMessage]);
+        localStorage.setItem(`chatHistory_${user.id}`, JSON.stringify([firstMessage]));
+      }
+      
+      // Restart the chat session
+      if (user.isAi) {
+        geminiService.startChat();
+      }
+    }
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -199,15 +223,26 @@ const ChatView: React.FC<ChatViewProps> = ({ user, onBack }) => {
   return (
     <div className="flex h-screen bg-white">
       <div className="flex-1 flex flex-col bg-gray-50">
-        <header className="flex items-center p-4 border-b border-gray-200 bg-white">
-          <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 mr-4">
-            <ArrowLeftIcon className="w-6 h-6 text-gray-600" />
-          </button>
-          <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full mr-3" />
-          <div>
-            <h2 className="font-bold text-lg">{user.name}</h2>
-            <p className="text-sm text-gray-500">{user.title}</p>
+        <header className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+          <div className="flex items-center">
+            <button onClick={onBack} className="p-2 rounded-full hover:bg-gray-100 mr-4">
+              <ArrowLeftIcon className="w-6 h-6 text-gray-600" />
+            </button>
+            <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full mr-3" />
+            <div>
+              <h2 className="font-bold text-lg">{user.name}</h2>
+              <p className="text-sm text-gray-500">{user.title}</p>
+            </div>
           </div>
+          {messages.length > 0 && (
+            <button
+              onClick={handleClearChat}
+              className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+              title="Clear chat history"
+            >
+              Clear Chat
+            </button>
+          )}
         </header>
         
         <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">

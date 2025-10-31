@@ -4,6 +4,8 @@ import { geminiService } from '../services/geminiService';
 import { ArrowLeftIcon, PaperAirplaneIcon } from './Icons';
 import RightSidebar from './RightSidebar';
 import type { Part } from '@google/genai';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 declare const jspdf: { jsPDF: new (options?: any) => any };
 
@@ -261,7 +263,15 @@ const ChatView: React.FC<ChatViewProps> = ({ user, onBack }) => {
                     : 'bg-white text-gray-800 border border-gray-200 rounded-bl-none'
                 }`}
               >
-                  <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                  <div className={`text-sm prose prose-sm max-w-none ${
+                    message.sender === 'user' 
+                      ? 'prose-invert prose-p:text-white prose-headings:text-white prose-strong:text-white prose-ul:text-white prose-ol:text-white prose-li:text-white' 
+                      : 'prose-slate prose-p:text-gray-800 prose-headings:text-gray-900 prose-strong:text-gray-900'
+                  }`}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {message.text}
+                    </ReactMarkdown>
+                  </div>
                   {message.mailtoLink && (
                     <a
                       href={message.mailtoLink}

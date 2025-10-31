@@ -1,0 +1,18 @@
+# robots.txt for Sharda University Bangladesh AI Ambassador
+User-agent: *
+Allow: /
+
+# Sitemaps
+Sitemap: https://ai-ambassador-chat.vercel.app/sitemap.xml
+
+# Crawl-delay
+Crawl-delay: 1
+
+# Disallow admin/internal paths (if any in future)
+Disallow: /admin/
+Disallow: /*.json$
+
+# Allow important resources
+Allow: /data/
+Allow: /assets/
+

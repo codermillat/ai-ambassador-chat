@@ -29,6 +29,7 @@ class DatasetService {
   private readonly CACHE_KEY = 'ai_ambassador_dataset_cache';
   private readonly CACHE_VERSION = 'v2'; // Increment when dataset structure changes
   private readonly CACHE_EXPIRY_DAYS = 7; // Cache expires after 7 days
+  private readonly EXPECTED_HF_ENTRIES = 7000; // Expected total HF entries (for detecting incomplete cache)
 
   /**
    * Load dataset from browser cache (IndexedDB/localStorage)
@@ -127,11 +128,30 @@ class DatasetService {
         const cached = await this.loadFromCache();
         
         if (cached) {
-          // Use cached dataset
-          this.dataset = cached.dataset;
-          this.isLoaded = true;
-          console.log(`✅ Using cached dataset: ${this.dataset.length} total entries (fresh load skipped)`);
-          return;
+          // Check if cache is complete or partial
+          const verifiedCount = 66; // We know this is the verified count
+          const cachedHFCount = cached.dataset.length - verifiedCount;
+          const isComplete = cachedHFCount >= this.EXPECTED_HF_ENTRIES;
+          
+          if (isComplete) {
+            // Cache is complete, use it
+            this.dataset = cached.dataset;
+            this.isLoaded = true;
+            console.log(`✅ Using cached dataset: ${this.dataset.length} total entries (complete cache)`);
+            return;
+          } else {
+            // Cache is partial, load remaining entries
+            console.log(`📦 Loaded ${cached.dataset.length} entries from cache (${cachedHFCount} HF entries)`);
+            console.log(`🔄 Cache incomplete, fetching remaining ${this.EXPECTED_HF_ENTRIES - cachedHFCount} entries...`);
+            
+            this.dataset = cached.dataset;
+            this.verifiedData = cached.dataset.slice(0, verifiedCount); // First 66 are verified
+            
+            // Fetch remaining entries starting from where we left off
+            const startOffset = cachedHFCount;
+            await this.loadRemainingHFData(startOffset);
+            return;
+          }
         }
 
         // No cache or expired cache - fetch fresh data
@@ -207,6 +227,64 @@ class DatasetService {
     })();
 
     return this.loadingPromise;
+  }
+
+  /**
+   * Load remaining HF data starting from a specific offset
+   * Used when cache is incomplete
+   */
+  private async loadRemainingHFData(startOffset: number): Promise<void> {
+    const batchSize = 100;
+    const maxEntries = 10000;
+    let offset = startOffset;
+    let newRows: DatasetEntry[] = [];
+
+    try {
+      while (offset < maxEntries) {
+        const length = Math.min(batchSize, maxEntries - offset);
+        const url = `https://datasets-server.huggingface.co/rows?dataset=millat/indian_university_guidance_for_bangladeshi_students&config=default&split=train&offset=${offset}&length=${length}`;
+        
+        try {
+          const response = await fetch(url);
+          
+          if (!response.ok) {
+            console.warn(`⚠️ API limit reached at ${offset} (${response.status}), stopping here`);
+            break;
+          }
+
+          const data = await response.json();
+          const rows = data.rows.map((row: any) => row.row);
+          
+          if (rows.length === 0) break;
+          
+          newRows = newRows.concat(rows);
+          offset += rows.length;
+
+          console.log(`📥 Additional HF batch: ${rows.length} entries (total new: ${newRows.length})`);
+
+          // Stop if we got fewer rows than requested (end of dataset)
+          if (rows.length < length) break;
+        } catch (error) {
+          console.warn(`⚠️ Fetch error at offset ${offset}, stopping here`);
+          break;
+        }
+      }
+
+      // Merge new data with existing cached data
+      this.dataset = [...this.dataset, ...newRows];
+      this.isLoaded = true;
+      
+      console.log(`✅ Updated dataset: ${this.dataset.length} total entries (added ${newRows.length} new entries)`);
+      
+      // Update cache with complete dataset
+      await this.saveToCache(this.dataset);
+      
+    } catch (error) {
+      console.error('❌ Error loading remaining data:', error);
+      // Keep existing cached data
+      this.isLoaded = true;
+      console.log(`⚠️ Using partial cache: ${this.dataset.length} entries`);
+    }
   }
 
   /**

@@ -16,51 +16,13 @@ interface DatasetEntry {
   };
 }
 
-interface LocalDataEntry {
-  question: string;
-  answer: string;
-}
-
 class DatasetService {
   private dataset: DatasetEntry[] = [];
-  private verifiedData: DatasetEntry[] = [];
   private isLoaded: boolean = false;
   private loadingPromise: Promise<void> | null = null;
 
   /**
-   * Load verified local data (takes priority)
-   */
-  private async loadVerifiedData(): Promise<void> {
-    try {
-      const response = await fetch('/data/verified-fees-scholarships-2024.json');
-      if (!response.ok) {
-        console.warn('⚠️ Could not load verified data file');
-        return;
-      }
-      
-      const localData: LocalDataEntry[] = await response.json();
-      
-      // Convert to DatasetEntry format with high priority
-      this.verifiedData = localData.map(item => ({
-        question: item.question,
-        answer: item.answer,
-        context: "Verified 2024-25 Fee Structure and Scholarship Policy",
-        source: "Official Sharda University 2024-25 Documentation",
-        metadata: {
-          country_origin: "Bangladesh",
-          tone: "professional",
-          cultural_sensitivity: true
-        }
-      }));
-      
-      console.log(`✅ Verified data loaded: ${this.verifiedData.length} entries`);
-    } catch (error) {
-      console.warn('⚠️ Error loading verified data:', error);
-    }
-  }
-
-  /**
-   * Fetch the dataset from Hugging Face (in batches) and merge with verified data
+   * Fetch the dataset from Hugging Face (in batches)
    */
   async loadDataset(): Promise<void> {
     if (this.isLoaded) return;
@@ -68,12 +30,9 @@ class DatasetService {
 
     this.loadingPromise = (async () => {
       try {
-        // First, load verified local data
-        await this.loadVerifiedData();
-        
         // Fetch dataset in batches (max 100 per request for HF API)
         const batchSize = 100;
-        const maxEntries = 500; // Load first 500 entries for faster initial load
+        const maxEntries = 10000; // Load all entries from Hugging Face
         let offset = 0;
         let allRows: DatasetEntry[] = [];
 
@@ -96,20 +55,19 @@ class DatasetService {
           allRows = allRows.concat(rows);
           offset += rows.length;
 
+          console.log(`📥 Loaded batch: ${rows.length} entries (total: ${allRows.length})`);
+
           // Stop if we got fewer rows than requested (end of dataset)
           if (rows.length < length) break;
         }
 
-        // Merge: verified data first (takes priority), then HF dataset
-        this.dataset = [...this.verifiedData, ...allRows];
+        this.dataset = allRows;
         this.isLoaded = true;
-        console.log(`✅ Dataset loaded: ${this.verifiedData.length} verified + ${allRows.length} HF = ${this.dataset.length} total entries`);
+        console.log(`✅ Dataset loaded from Hugging Face: ${this.dataset.length} total entries`);
       } catch (error) {
         console.error('❌ Error loading dataset:', error);
-        // Fall back to verified data only if available
-        this.dataset = this.verifiedData;
+        this.dataset = [];
         this.isLoaded = true;
-        console.log(`⚠️ Fallback: Using ${this.dataset.length} verified entries only`);
       }
     })();
 

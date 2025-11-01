@@ -27,7 +27,7 @@ class DatasetService {
   private isLoaded: boolean = false;
   private loadingPromise: Promise<void> | null = null;
   private readonly CACHE_KEY = 'ai_ambassador_dataset_cache';
-  private readonly CACHE_VERSION = 'v2'; // Increment when dataset structure changes
+  private readonly CACHE_VERSION = 'v3'; // Increment when dataset structure changes (v3: added scholarship application process)
   private readonly CACHE_EXPIRY_DAYS = 7; // Cache expires after 7 days
   private readonly EXPECTED_HF_ENTRIES = 7000; // Expected total HF entries (for detecting incomplete cache)
 
@@ -215,7 +215,7 @@ class DatasetService {
         
         if (cached) {
           // Check if cache is complete or partial
-          const verifiedCount = 66; // We know this is the verified count
+          const verifiedCount = 101; // Updated count: 98 original + 3 new scholarship Q&As
           const cachedHFCount = cached.dataset.length - verifiedCount;
           const isComplete = cachedHFCount >= this.EXPECTED_HF_ENTRIES;
           
@@ -231,7 +231,7 @@ class DatasetService {
             console.log(`🔄 Cache incomplete, fetching remaining ${this.EXPECTED_HF_ENTRIES - cachedHFCount} entries...`);
             
             this.dataset = cached.dataset;
-            this.verifiedData = cached.dataset.slice(0, verifiedCount); // First 66 are verified
+            this.verifiedData = cached.dataset.slice(0, verifiedCount); // First 101 are verified
             
             // Fetch remaining entries starting from where we left off
             const startOffset = cachedHFCount;

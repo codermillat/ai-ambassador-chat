@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Message } from '../types';
 import { geminiService } from '../services/geminiService';
+import { datasetService } from '../services/datasetService';
 import { ArrowLeftIcon, PaperAirplaneIcon } from './Icons';
 import RightSidebar from './RightSidebar';
 import type { Part } from '@google/genai';
@@ -46,6 +47,18 @@ const ChatView: React.FC<ChatViewProps> = ({ user, onBack }) => {
         geminiService.startChat().catch(error => {
           console.error('Error restarting chat:', error);
         });
+      }
+    }
+  };
+
+  const handleRefreshKnowledgeBase = async () => {
+    if (window.confirm('This will reload the latest information from the knowledge base. The page will refresh. Continue?')) {
+      try {
+        await datasetService.clearCacheAndReload();
+        // The clearCacheAndReload method will reload the page automatically
+      } catch (error) {
+        console.error('Error refreshing knowledge base:', error);
+        alert('Failed to refresh knowledge base. Please try manually refreshing the page (Ctrl+Shift+R or Cmd+Shift+R).');
       }
     }
   };
@@ -240,15 +253,26 @@ const ChatView: React.FC<ChatViewProps> = ({ user, onBack }) => {
               <p className="text-sm text-gray-500">{user.title}</p>
             </div>
           </div>
-          {messages.length > 0 && (
-            <button
-              onClick={handleClearChat}
-              className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
-              title="Clear chat history"
-            >
-              Clear Chat
-            </button>
-          )}
+          <div className="flex gap-2">
+            {user.isAi && (
+              <button
+                onClick={handleRefreshKnowledgeBase}
+                className="px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                title="Reload latest information from knowledge base"
+              >
+                🔄 Refresh Info
+              </button>
+            )}
+            {messages.length > 0 && (
+              <button
+                onClick={handleClearChat}
+                className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                title="Clear chat history"
+              >
+                Clear Chat
+              </button>
+            )}
+          </div>
         </header>
         
         <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">

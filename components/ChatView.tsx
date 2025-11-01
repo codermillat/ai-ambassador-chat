@@ -62,7 +62,7 @@ const ChatView: React.FC<ChatViewProps> = ({ user, onBack }) => {
       setIsLoading(true);
       const firstMessage: Message = {
         id: 'initial-greeting',
-        text: "Hello! I'm your AI guide for Sharda University, trained to help Bangladeshi students like you. I can answer questions about admissions, courses, life in India, scholarships, and more based on our comprehensive database of 7,000+ Q&A pairs. How can I assist you today?",
+        text: "🙏 **Assalamu Alaikum!** Welcome to Sharda University's AI Admission Assistant.\n\nI'm here to guide you through your journey to study in India. I have comprehensive knowledge about:\n\n✅ **Admission Process** - Step-by-step guidance for Bangladeshi students\n✅ **Fees & Scholarships** - Up to 50% scholarship details\n✅ **Programs** - 135+ undergraduate & postgraduate courses\n✅ **Visa Process** - IVAC documentation and requirements\n✅ **Campus Life** - Accommodation, facilities, and student support\n✅ **University Rankings** - QS Asia Rank 219, NAAC A+ accredited\n\nI'm trained on verified, up-to-date information to provide you with accurate answers. Feel free to ask me anything!\n\n**Popular Questions:**\n- What are the fees for B.Tech programs?\n- What documents do I need for IVAC visa?\n- How do I apply for scholarships?\n- What is the admission process?\n\nHow may I help you today? 😊",
         sender: 'ai',
         timestamp: new Date().toISOString()
       };
